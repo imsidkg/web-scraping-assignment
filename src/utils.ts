@@ -7,13 +7,19 @@ export interface ProductData {
   Title: string;
   Description: string;
   Price: string;
+  Rating: string;
   Reviews: string;
 }
 
-export const logError = (sku: string, source: string, error: unknown) => {
+export const logError = (
+  sku: string,
+  source: string,
+  error: unknown,
+  reason: string = "Unknown Error",
+) => {
   const timestamp = new Date().toISOString();
   const errorMessage = error instanceof Error ? error.message : String(error);
-  const logMessage = `[${timestamp}] ERROR fetching SKU ${sku} from ${source}: ${errorMessage}\n`;
+  const logMessage = `[${timestamp}] ERROR fetching SKU ${sku} from ${source}. Reason: ${reason}. Details: ${errorMessage}\n`;
 
   fs.appendFileSync("errors.log", logMessage);
   console.error(logMessage);
@@ -28,6 +34,7 @@ export const saveToCsv = async (data: ProductData[]) => {
       { id: "Title", title: "Title" },
       { id: "Description", title: "Description" },
       { id: "Price", title: "Price" },
+      { id: "Rating", title: "Rating" },
       { id: "Reviews", title: "Reviews" },
     ],
     append: true,
@@ -43,10 +50,11 @@ export const saveToCsv = async (data: ProductData[]) => {
         { id: "Title", title: "Title" },
         { id: "Description", title: "Description" },
         { id: "Price", title: "Price" },
+        { id: "Rating", title: "Rating" },
         { id: "Reviews", title: "Reviews" },
       ],
     });
-    // Just initializing the file to have headers
+    await headerWriter.writeRecords([]);
   }
 
   await csvWriter.writeRecords(data);
