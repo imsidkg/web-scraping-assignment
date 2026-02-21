@@ -1,13 +1,20 @@
+import * as fs from "fs";
 import {
   createBrowser,
   createContext,
   applyStealthScripts,
   sleep,
   simulateHumanBehavior,
+  writeToCSV,
 } from "./utils";
 
-async function main() {
-  console.log("Starting step-by-step scraper...");
+interface SkuInput {
+  Type: "Amazon" | "Walmart";
+  SKU: string;
+}
+
+async function runSingleWalmartExtraction(testSku: string) {
+  console.log(`Starting extraction for SKU: ${testSku}...`);
   const browser = await createBrowser();
 
   try {
@@ -109,7 +116,6 @@ async function main() {
     await simulateHumanBehavior(page);
 
     // Next step: Type sku [sku] with randomized keystroke delays
-    const testSku = "5326288985"; // Walmart SKU requested by user
     const targetSource: string = "walmart"; // Or "amazon"
     const searchQuery = `${targetSource} sku ${testSku}`;
 
@@ -188,7 +194,7 @@ async function main() {
         `Navigated directly to ${targetSource} Product page successfully.`,
       );
       await sleep(3000);
-      return;
+      return null;
     }
 
     console.log("Scanning search results for the Amazon link...");
@@ -253,272 +259,79 @@ async function main() {
     // Additional wait to observe the final page loaded
     await sleep(3000);
 
+    console.log("Extracting product data...");
+
+    if (targetSource === "walmart") {
+      // Wait for key element
+      await page
+        .waitForSelector('h1[itemprop="name"]', { timeout: 10000 })
+        .catch(() => null);
+
+      // Extract with fallbacks
+      const title = await page
+        .$eval(
+          'h1[itemprop="name"]',
+          (el: Element) => el.textContent?.trim() || null,
+        )
+        .catch(() => null);
+
+      const price = await page
+        .$eval(
+          '[itemprop="price"]',
+          (el: Element) => el.textContent?.trim() || null,
+        )
+        .catch(() => null);
+
+      const description = await page
+        .$eval(
+          ".dangerous-html",
+          (el: Element) => el.textContent?.trim() || null,
+        )
+        .catch(() => null);
+
+      const reviews = await page
+        .$eval(
+          '[data-testid="item-review-section-link"]',
+          (el: Element) => el.textContent?.trim() || null,
+        )
+        .catch(() => null);
+
+      let rating = await page
+        .$eval(
+          "span.rating-number",
+          (el: Element) => el.textContent?.trim() || null,
+        )
+        .catch(() => null);
+
+      if (rating) {
+        rating = rating.replace(/\(|\)/g, "").trim();
+      }
+
+      console.log(`\n[Walmart] Scraped complete for SKU ${testSku}`);
+      const productData = {
+        sku: testSku,
+        source: "Walmart",
+        title,
+        price,
+        description,
+        reviews,
+        rating,
+      };
+
+      console.log(JSON.stringify(productData, null, 2));
+
+      console.log("Finished search and click step.");
+      return productData;
+    }
+
     console.log("Finished search and click step.");
+    return null;
   } catch (error) {
     console.error("Error during execution:", error);
+    return null;
   } finally {
     console.log("Closing browser...");
     await browser.close();
-  }
-}
-
-main().catch(console.error);
-
-/* 
-// --- PREVIOUS CODE ---
-import * as fs from "fs";
-import pLimit from "p-limit";
-import {
-  createBrowser,
-  createContext,
-  applyStealthScripts,
-  simulateHumanBehavior,
-  isBlocked,
-  logError,
-  logInfo,
-  withRetry,
-  writeToCSV,
-  ProductData,
-  sleep,
-} from "./utils";
-
-interface SkuInput {
-  Type: "Amazon" | "Walmart";
-  SKU: string;
-}
-
-async function navigateViaGoogleSearch(
-  page: any,
-  query: string,
-  expectedDomain: string,
-): Promise<boolean> {
-  logInfo(`Navigating via Google Search for: ${query}`);
-  try {
-    await page.goto("https://www.google.com", {
-      waitUntil: "domcontentloaded",
-      timeout: 30000,
-    });
-
-    await simulateHumanBehavior(page);
-
-    const searchInput = 'textarea[name="q"], input[name="q"]';
-    await page.waitForSelector(searchInput, {
-      state: "visible",
-      timeout: 10000,
-    });
-    await page.type(searchInput, query, { delay: 100 + Math.random() * 100 });
-    await sleep(500);
-
-    await Promise.all([
-      page
-        .waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30000 })
-        .catch(() => null),
-      page.keyboard.press("Enter"),
-    ]);
-
-    await simulateHumanBehavior(page);
-
-    // Find search results
-    const resultLinks = await page.$$("div#search a");
-    let clicked = false;
-    for (const link of resultLinks) {
-      const href = await link.getAttribute("href").catch(() => "");
-      if (href && href.includes(expectedDomain)) {
-        logInfo(`Found organic link: ${href}. Clicking...`);
-        await Promise.all([
-          page
-            .waitForNavigation({
-              waitUntil: "domcontentloaded",
-              timeout: 30000,
-            })
-            .catch(() => null),
-          link.click(),
-        ]);
-        clicked = true;
-        break;
-      }
-    }
-
-    return clicked;
-  } catch (e) {
-    logInfo(`Google Search navigation failed: ${String(e)}`);
-    return false;
-  }
-}
-
-async function scrapeAmazon(sku: string): Promise<ProductData | null> {
-  const browser = await createBrowser();
-
-  try {
-    const context = await createContext(browser);
-    const page = await context.newPage();
-
-    await applyStealthScripts(page);
-
-    // Navigate via Google Search
-    const success = await navigateViaGoogleSearch(
-      page,
-      `amazon ${sku}`,
-      "amazon.com",
-    );
-    if (!success) {
-      logInfo(
-        `[Amazon] Could not find Amazon link in Google results for SKU ${sku}, falling back to direct navigation...`,
-      );
-      const url = `https://www.amazon.com/dp/${sku}`;
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
-    }
-
-    await simulateHumanBehavior(page);
-
-    // Check for block
-    const { blocked, reason } = await isBlocked(page);
-    if (blocked) {
-      logError(sku, "Amazon", reason);
-      return null;
-    }
-
-    // Wait for key element
-    await page
-      .waitForSelector("#productTitle", { timeout: 10000 })
-      .catch(() => null);
-
-    // Extract with fallbacks
-    const title = await page
-      .$eval("#productTitle", (el: Element) => el.textContent?.trim() || null)
-      .catch(() => null);
-
-    const price = await page
-      .$eval(
-        ".a-price .a-offscreen, #priceblock_ourprice, #priceblock_dealprice",
-        (el: Element) => el.textContent?.trim() || null,
-      )
-      .catch(() => null);
-
-    const description = await page
-      .$eval(
-        "#productDescription p, #feature-bullets .a-list-item",
-        (el: Element) => el.textContent?.trim() || null,
-      )
-      .catch(() => null);
-
-    const reviews = await page
-      .$eval(
-        "#acrCustomerReviewText",
-        (el: Element) => el.textContent?.trim() || null,
-      )
-      .catch(() => null);
-
-    const rating = await page
-      .$eval(
-        'span[data-hook="rating-out-of-text"], .a-icon-alt',
-        (el: Element) => el.textContent?.trim() || null,
-      )
-      .catch(() => null);
-
-    logInfo(`[Amazon] Scraped complete: ${title || "N/A"}`);
-
-    return {
-      sku,
-      source: "Amazon",
-      title,
-      price,
-      description,
-      reviews,
-      rating,
-    };
-  } finally {
-    await browser.close(); // always runs even on error
-  }
-}
-
-async function scrapeWalmart(sku: string): Promise<ProductData | null> {
-  const browser = await createBrowser();
-
-  try {
-    const context = await createContext(browser);
-    const page = await context.newPage();
-
-    await applyStealthScripts(page);
-
-    // Navigate via Google Search
-    const success = await navigateViaGoogleSearch(
-      page,
-      `walmart ${sku}`,
-      "walmart.com/ip",
-    );
-    if (!success) {
-      logInfo(
-        `[Walmart] Could not find Walmart link in Google results for SKU ${sku}, falling back to direct navigation...`,
-      );
-      const url = `https://www.walmart.com/ip/${sku}`;
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
-    }
-
-    await simulateHumanBehavior(page);
-
-    // Check for block
-    const { blocked, reason } = await isBlocked(page);
-    if (blocked) {
-      logError(sku, "Walmart", reason);
-      return null;
-    }
-
-    // Wait for key element
-    await page
-      .waitForSelector('h1[itemprop="name"]', { timeout: 10000 })
-      .catch(() => null);
-
-    // Extract with fallbacks
-    const title = await page
-      .$eval(
-        'h1[itemprop="name"]',
-        (el: Element) => el.textContent?.trim() || null,
-      )
-      .catch(() => null);
-
-    const price = await page
-      .$eval(
-        '[itemprop="price"]',
-        (el: Element) => el.textContent?.trim() || null,
-      )
-      .catch(() => null);
-
-    const description = await page
-      .$eval(".dangerous-html", (el: Element) => el.textContent?.trim() || null)
-      .catch(() => null);
-
-    const reviews = await page
-      .$eval(
-        '[data-testid="item-review-section-link"]',
-        (el: Element) => el.textContent?.trim() || null,
-      )
-      .catch(() => null);
-
-    let rating = await page
-      .$eval(
-        "span.rating-number",
-        (el: Element) => el.textContent?.trim() || null,
-      )
-      .catch(() => null);
-
-    if (rating) {
-      rating = rating.replace(/\\(|\\)/g, "").trim();
-    }
-
-    logInfo(`[Walmart] Scraped complete: ${title || "N/A"}`);
-
-    return {
-      sku,
-      source: "Walmart",
-      title,
-      price,
-      description,
-      reviews,
-      rating,
-    };
-  } finally {
-    await browser.close(); // always runs even on error
   }
 }
 
@@ -526,45 +339,34 @@ async function main() {
   const rawData = fs.readFileSync("skus.json", "utf-8");
   const skus: { skus: SkuInput[] } = JSON.parse(rawData);
 
-  // Use p-limit to handle maximum concurrency globally
-  const limit = pLimit(2); // max 2 concurrent scrapers
+  console.log(`Starting extraction process for ${skus.skus.length} items...`);
 
-  logInfo(`Starting extraction process for ${skus.skus.length} items...`);
+  // We only added Walmart SKUs recently so let's filter just them
+  const walmartSkus = skus.skus.filter((s) => s.Type === "Walmart");
 
-  // To combine p-limit concurrency tightly with checkpointing/streaming,
-  // we can chunk the array and process chunk by chunk.
-  const BATCH_SIZE = 10;
-  for (let i = 0; i < skus.skus.length; i += BATCH_SIZE) {
-    const chunk = skus.skus.slice(i, i + BATCH_SIZE);
-
-    logInfo(
-      `Processing batch: items ${i + 1} to ${Math.min(i + BATCH_SIZE, skus.skus.length)}`,
+  for (let i = 0; i < walmartSkus.length; i++) {
+    const skuObj = walmartSkus[i];
+    console.log(
+      `Processing item ${i + 1}/${walmartSkus.length}: ${skuObj.SKU}`,
     );
 
-    const results = await Promise.all(
-      chunk.map(({ SKU, Type }) =>
-        limit(() =>
-          withRetry(
-            () => (Type === "Amazon" ? scrapeAmazon(SKU) : scrapeWalmart(SKU)),
-            { retries: 3, baseDelay: 3000, sku: SKU, source: Type },
-          ),
-        ),
-      ),
-    );
+    // Call the single-run scraper logic over and over
+    const productData = await runSingleWalmartExtraction(skuObj.SKU);
 
-    const validResults = results.filter((r): r is ProductData => r !== null);
-    if (validResults.length > 0) {
-      await writeToCSV(validResults);
+    if (productData) {
+      await writeToCSV([productData]);
     }
 
-    logInfo(
-      `Finished batch. Triggering random cool-down to evade bot detection...`,
-    );
-    await new Promise((resolve) =>
-      setTimeout(resolve, 5000 + Math.random() * 5000),
-    );
+    if (i < walmartSkus.length - 1) {
+      const delay = 5000 + Math.random() * 5000;
+      console.log(
+        `Waiting ${Math.round(delay / 1000)}s before next extraction...`,
+      );
+      await sleep(delay);
+    }
   }
+
+  console.log("Scraping completed.");
 }
 
 main().catch(console.error);
-*/
