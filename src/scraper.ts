@@ -9,7 +9,7 @@ import {
 } from "./utils";
 import * as fs from "fs";
 
-chromium.use(stealthPlugin());
+chromium.use(stealthPlugin()); // Re-enabled to bypass PerimeterX CAPTCHA loops
 
 interface SkuInput {
   Type: "Amazon" | "Walmart";
@@ -208,11 +208,12 @@ async function main() {
 
   const productData: ProductData[] = [];
 
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless: true });
 
-  // Lower concurrency limit to 1 so you don't have to solve multiple captchas at once
-  const CONCURRENCY_LIMIT = 1;
+  const CONCURRENCY_LIMIT = 2; // Process 2 at a time is safer globally
   const skuChunks = chunkArray(skus.skus, CONCURRENCY_LIMIT);
+
+  let processedCount = 0;
 
   for (const chunk of skuChunks) {
     console.log(`Processing batch of ${chunk.length} items...`);
@@ -251,15 +252,38 @@ async function main() {
     });
 
     await Promise.all(promises);
-    await sleep(2000); // Sleep between batches to reduce load
+
+    // Save the data incrementally after EVERY chunk to prevent data loss on crash/stop
+    if (productData.length > 0) {
+      await saveToCsv(productData);
+      console.log(
+        `[Checkpoint] Appended ${productData.length} records to product_data.csv.`,
+      );
+      productData.length = 0; // Clear the array after saving
+    }
+
+    processedCount += chunk.length;
+
+    // Rate Limiting Logic: Wait 5 minutes every 10 items
+    if (
+      processedCount >= 10 &&
+      processedCount % 10 === 0 &&
+      processedCount < skus.skus.length
+    ) {
+      console.log(
+        `\n--- Rate Limit Triggered: Processed ${processedCount} items. Waiting 5 minutes before next batch to prevent IP ban... ---`,
+      );
+      await sleep(5 * 60 * 1000); // Wait 5 minutes (300,000 milliseconds)
+      console.log("Resuming scraping...\n");
+    } else if (processedCount < skus.skus.length) {
+      // Standard small delay between normal chunks
+      console.log("Waiting 5 seconds before next chunk...");
+      await sleep(5000);
+    }
   }
 
+  console.log(`\nFinished processing ${processedCount} records!`);
   await browser.close();
-
-  if (productData.length > 0) {
-    await saveToCsv(productData);
-    console.log(`Saved ${productData.length} records to product_data.csv`);
-  }
 }
 
 main().catch(console.error);
