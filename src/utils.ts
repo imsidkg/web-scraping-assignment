@@ -17,57 +17,32 @@ export interface ProductData {
   reviews: string | null;
 }
 
-const USER_AGENTS = [
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.1 Safari/605.1.15",
-];
+// Removed dynamic user agent and viewport generation as we are now using the default browser context.
 
-export function getRandomUserAgent(): string {
-  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-}
-
-export function getRandomViewport() {
-  const widths = [1280, 1366, 1440, 1536, 1920];
-  const width = widths[Math.floor(Math.random() * widths.length)];
-  return { width, height: Math.floor(width * 0.6) };
-}
-
-export async function createBrowser() {
-  return await chromium.launch({
-    headless: true,
-    args: [
-      "--disable-blink-features=AutomationControlled",
-      "--disable-dev-shm-usage",
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-accelerated-2d-canvas",
-      "--disable-gpu",
-      "--window-size=1280,800",
-    ],
-  });
+export async function createBrowser(proxyUrl?: string) {
+  console.log("Connecting to existing Chrome instance on port 9222...");
+  try {
+    // Connect to an already running Chrome instance that was launched with --remote-debugging-port=9222
+    return await chromium.connectOverCDP("http://127.0.0.1:9222");
+  } catch (err) {
+    console.error("Failed to connect to existing Chrome instance.");
+    console.error(
+      "Make sure you started your physical Chrome browser from the terminal using:",
+    );
+    console.error("google-chrome --remote-debugging-port=9222");
+    throw err;
+  }
 }
 
 export async function createContext(browser: any) {
-  return await browser.newContext({
-    userAgent: getRandomUserAgent(),
-    viewport: getRandomViewport(),
-    locale: "en-US",
-    timezoneId: "America/New_York",
-    extraHTTPHeaders: {
-      Accept:
-        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Accept-Encoding": "gzip, deflate, br",
-      Connection: "keep-alive",
-      "Upgrade-Insecure-Requests": "1",
-      "Sec-Fetch-Dest": "document",
-      "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-Site": "none",
-      "Sec-Fetch-User": "?1",
-    },
-  });
+  const contexts = browser.contexts();
+  if (contexts.length > 0) {
+    console.log("Attached to your existing Chrome profile and tabs...");
+    return contexts[0];
+  }
+
+  console.log("Creating fallback context...");
+  return await browser.newContext();
 }
 
 export async function applyStealthScripts(page: any) {
@@ -105,17 +80,12 @@ export async function applyStealthScripts(page: any) {
 
     // Spoof platform
     Object.defineProperty(navigator, "platform", {
-      get: () => "Win32",
+      get: () => "Linux x86_64",
     });
 
-    // Remove cdc_ variables injected by ChromeDriver
-    const originalQuery = window.navigator.permissions.query;
-    window.navigator.permissions.query = (parameters: any) =>
-      parameters.name === "notifications"
-        ? Promise.resolve({
-            state: Notification.permission,
-          } as PermissionStatus)
-        : originalQuery(parameters);
+    // We will rely on puppeteer-extra-plugin-stealth for the rest.
+    // Manual hooks for WebGL and Canvas here are often detected by Google's
+    // advanced bot protection because they fail the Function.prototype.toString check.
   });
 }
 
@@ -159,23 +129,6 @@ export async function simulateHumanBehavior(page: any): Promise<void> {
   });
 
   await randomDelay(300, 800);
-}
-
-export async function warmUpSession(
-  page: any,
-  source: "Amazon" | "Walmart",
-): Promise<void> {
-  const homepages: Record<string, string> = {
-    Amazon: "https://www.amazon.com",
-    Walmart: "https://www.walmart.com",
-  };
-
-  await page.goto(homepages[source], {
-    waitUntil: "domcontentloaded",
-    timeout: 30000,
-  });
-
-  await simulateHumanBehavior(page);
 }
 
 export async function isBlocked(
