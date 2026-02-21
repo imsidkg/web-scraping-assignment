@@ -108,9 +108,10 @@ async function main() {
     );
     await simulateHumanBehavior(page);
 
-    // Next step: Type amazon sku [sku] with randomized keystroke delays
-    const testSku = "B01LR5S6HK"; // Test SKU requested by user
-    const searchQuery = `amazon sku ${testSku}`;
+    // Next step: Type sku [sku] with randomized keystroke delays
+    const testSku = "5326288985"; // Walmart SKU requested by user
+    const targetSource: string = "walmart"; // Or "amazon"
+    const searchQuery = `${targetSource} sku ${testSku}`;
 
     console.log(`Searching for: "${searchQuery}" with random delays...`);
     const searchInputSelector = 'textarea[name="q"], input[name="q"]';
@@ -171,13 +172,21 @@ async function main() {
     ) {
       console.log("🚨 GOOGLE IP BLOCK DETECTED 🚨");
       console.log(
-        "Google is blocking this IP. Falling back to direct Amazon navigation...",
+        `Google is blocking this IP. Falling back to direct ${targetSource} navigation...`,
       );
-      await page.goto(`https://www.amazon.com/dp/${testSku}`, {
+      let fallbackUrl = "";
+      if (targetSource === "amazon")
+        fallbackUrl = `https://www.amazon.com/dp/${testSku}`;
+      else if (targetSource === "walmart")
+        fallbackUrl = `https://www.walmart.com/ip/${testSku}`;
+
+      await page.goto(fallbackUrl, {
         waitUntil: "domcontentloaded",
         timeout: 30000,
       });
-      console.log("Navigated directly to Amazon Product page successfully.");
+      console.log(
+        `Navigated directly to ${targetSource} Product page successfully.`,
+      );
       await sleep(3000);
       return;
     }
@@ -189,11 +198,20 @@ async function main() {
 
     for (const link of resultLinks) {
       const href = await link.getAttribute("href").catch(() => "");
-      // We check that it's an amazon link targeting a product (/dp/ or the sku), avoiding blogs
+      // We check that it's a link targeting the correct product domain, avoiding blogs/Google cache
+      const isTargetDomain = href.includes(targetSource);
+
+      let isProductLink = false;
+      if (targetSource === "amazon") {
+        isProductLink = href.includes("/dp/") || href.includes(testSku);
+      } else if (targetSource === "walmart") {
+        isProductLink = href.includes("/ip/") || href.includes(testSku);
+      }
+
       if (
         href &&
-        href.includes("amazon.com") &&
-        (href.includes("/dp/") || href.includes(testSku)) &&
+        isTargetDomain &&
+        isProductLink &&
         !href.includes("google.com")
       ) {
         console.log(`Found relevant product link: ${href}`);
