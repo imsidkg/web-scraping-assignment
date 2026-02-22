@@ -20,6 +20,9 @@ importers:
       papaparse:
         specifier: ^5.5.3
         version: 5.5.3
+      patchright:
+        specifier: ^1.57.0
+        version: 1.57.0
       playwright:
         specifier: ^1.58.2
         version: 1.58.2
@@ -642,6 +645,16 @@ packages:
 
   papaparse@5.5.3:
     resolution: {integrity: sha512-5QvjGxYVjxO59MGU2lHVYpRWBBtKHnlIAcSe1uNFCkkptUh63NFRj0FJQm7nR67puEruUci/ZkjmEFrjCAyP4A==}
+
+  patchright-core@1.57.0:
+    resolution: {integrity: sha512-um/9Wue7IFAa9UDLacjNgDn62ub5GJe1b1qouvYpELIF9rsFVMNhRo/rRXYajupLwp5xKJ0sSjOV6sw8/HarBQ==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  patchright@1.57.0:
+    resolution: {integrity: sha512-pxbI/D65QiFuCY3qUXKQONRhplR3rkYFhry5ieimEbzLNxu/xfOYizQRyuMgc6F5ZoZ37QNIwZz9PWEfn6aC1Q==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   path-is-absolute@1.0.1:
     resolution: {integrity: sha512-AVbw3UJ2e9bq64vSaS9Am0fje1Pa8pbGqTTsmXfaIiMpnr5DlDhfJOuLj9Sf95ZPVDAUerDfEk88MPmPe7UCQg==}
@@ -1373,6 +1386,14 @@ snapshots:
       yocto-queue: 1.2.2
 
   papaparse@5.5.3: {}
+
+  patchright-core@1.57.0: {}
+
+  patchright@1.57.0:
+    dependencies:
+      patchright-core: 1.57.0
+    optionalDependencies:
+      fsevents: 2.3.2
 
   path-is-absolute@1.0.1: {}
 
