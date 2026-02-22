@@ -123,7 +123,7 @@ export async function runSingleWalmartExtraction(
     const warmupSites = [
       { url: "https://youtube.com", name: "YouTube" },
       { url: "https://wikipedia.org", name: "Wikipedia" },
-      { url: "https://google.com", name: "Google" },
+      { url: "https://amazon.com", name: "Amazon" },
     ];
 
     for (const site of warmupSites) {
