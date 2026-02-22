@@ -13,13 +13,15 @@ interface SkuInput {
   SKU: string;
 }
 
-async function runSingleWalmartExtraction(testSku: string) {
+async function runSingleWalmartExtraction(browser: any, testSku: string) {
   console.log(`Starting extraction for SKU: ${testSku}...`);
-  const browser = await createBrowser();
+  let pageAmazon: any;
+  let pageWalmart: any;
+  let page: any;
 
   try {
     const context = await createContext(browser);
-    const pageAmazon = await context.newPage();
+    pageAmazon = await context.newPage();
 
     console.log("Navigating to https://www.amazon.com/ in a new tab...");
     await pageAmazon.goto("https://www.amazon.com/", {
@@ -28,7 +30,7 @@ async function runSingleWalmartExtraction(testSku: string) {
     });
     await sleep(2000 + Math.random() * 2000);
 
-    const pageWalmart = await context.newPage();
+    pageWalmart = await context.newPage();
 
     console.log("Navigating to https://www.walmart.com/ in a new tab...");
     await pageWalmart.goto("https://www.walmart.com/", {
@@ -38,7 +40,9 @@ async function runSingleWalmartExtraction(testSku: string) {
     await sleep(2000 + Math.random() * 2000);
 
     // Create a third tab for Google
-    const page = await context.newPage();
+    page = await context.newPage();
+    // ... (The rest is identical, we just swap `runSingleWalmartExtraction(testSku)` signature down below) ...
+    // To be safe, let's keep the rest of the file intact by only replacing the signature here, and we'll fix the invocation below in a split.
 
     // Step 3a: Build Google cookie history with a generic, benign search first.
     console.log(
@@ -330,8 +334,12 @@ async function runSingleWalmartExtraction(testSku: string) {
     console.error("Error during execution:", error);
     return null;
   } finally {
-    console.log("Closing browser...");
-    await browser.close();
+    console.log("Closing the 3 created tabs to keep things clean...");
+    try {
+      if (page) await page.close().catch(() => null);
+      if (pageAmazon) await pageAmazon.close().catch(() => null);
+      if (pageWalmart) await pageWalmart.close().catch(() => null);
+    } catch (e) {}
   }
 }
 
@@ -341,32 +349,43 @@ async function main() {
 
   console.log(`Starting extraction process for ${skus.skus.length} items...`);
 
+  const browser = await createBrowser();
+
   // We only added Walmart SKUs recently so let's filter just them
   const walmartSkus = skus.skus.filter((s) => s.Type === "Walmart");
 
-  for (let i = 0; i < walmartSkus.length; i++) {
-    const skuObj = walmartSkus[i];
-    console.log(
-      `Processing item ${i + 1}/${walmartSkus.length}: ${skuObj.SKU}`,
-    );
+  for (let iteration = 0; iteration < 100; iteration++) {
+    console.log(`\n\n=== STRESS TEST ITERATION ${iteration + 1} / 100 ===\n\n`);
 
-    // Call the single-run scraper logic over and over
-    const productData = await runSingleWalmartExtraction(skuObj.SKU);
-
-    if (productData) {
-      await writeToCSV([productData]);
-    }
-
-    if (i < walmartSkus.length - 1) {
-      const delay = 5000 + Math.random() * 5000;
+    for (let i = 0; i < walmartSkus.length; i++) {
+      const skuObj = walmartSkus[i];
       console.log(
-        `Waiting ${Math.round(delay / 1000)}s before next extraction...`,
+        `Processing item ${i + 1}/${walmartSkus.length}: ${skuObj.SKU}`,
       );
-      await sleep(delay);
+
+      // Call the single-run scraper logic over and over
+      const productData = await runSingleWalmartExtraction(browser, skuObj.SKU);
+
+      if (productData) {
+        await writeToCSV([productData]);
+      }
+
+      if (i < walmartSkus.length - 1) {
+        const delay = 5000 + Math.random() * 5000;
+        console.log(
+          `Waiting ${Math.round(delay / 1000)}s before next extraction...`,
+        );
+        await sleep(delay);
+      }
     }
+
+    console.log(`Finished iteration ${iteration + 1}. Taking a short break...`);
+    await sleep(5000 + Math.random() * 5000);
   }
 
   console.log("Scraping completed.");
+
+  await browser.close().catch(() => null);
 }
 
 main().catch(console.error);
