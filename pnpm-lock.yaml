@@ -29,6 +29,9 @@ importers:
       puppeteer-extra-plugin-stealth:
         specifier: ^2.11.2
         version: 2.11.2(playwright-extra@4.3.6(playwright-core@1.58.2)(playwright@1.58.2))
+      rebrowser-playwright:
+        specifier: ^1.52.0
+        version: 1.52.0
       user-agents:
         specifier: ^1.1.669
         version: 1.1.669
@@ -727,6 +730,16 @@ packages:
         optional: true
       puppeteer-extra:
         optional: true
+
+  rebrowser-playwright-core@1.52.0:
+    resolution: {integrity: sha512-gjrvLNh0RX6B/tg6pWaPNGf+9+z1Jl2EyAh5MXD5xMa2lputGRZ9V2MJ/uofcC5Np3vSOJ3SdVSRqwteC0FjfQ==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  rebrowser-playwright@1.52.0:
+    resolution: {integrity: sha512-UjpqfwmF9+XtOuCCxGQ2ZlLeuSaSv//4Z6ZQgYPsJovz3d7nWodCd2hSRQigAswAUnsPmVwnQUpSn+TLKaKV+A==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   resolve-pkg-maps@1.0.0:
     resolution: {integrity: sha512-seS2Tj26TBVOC2NIc2rOe2y2ZO7efxITtLZcGSOnHHNOQ7CkiUBfw0Iw2ck6xkIhPwLhKNLS8BO+hEpngQlqzw==}
@@ -1433,6 +1446,14 @@ snapshots:
       playwright-extra: 4.3.6(playwright-core@1.58.2)(playwright@1.58.2)
     transitivePeerDependencies:
       - supports-color
+
+  rebrowser-playwright-core@1.52.0: {}
+
+  rebrowser-playwright@1.52.0:
+    dependencies:
+      playwright-core: rebrowser-playwright-core@1.52.0
+    optionalDependencies:
+      fsevents: 2.3.2
 
   resolve-pkg-maps@1.0.0: {}
 
