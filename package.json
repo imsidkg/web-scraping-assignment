@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "tsx src/scraper.ts",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
   },
   "keywords": [],
   "author": "",
@@ -12,8 +14,10 @@
   "packageManager": "pnpm@10.12.4",
   "devDependencies": {
     "@types/node": "^25.3.0",
+    "@vitest/coverage-v8": "^4.0.18",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "@types/papaparse": "^5.5.2",

@@ -7,13 +7,14 @@ import {
   simulateHumanBehavior,
   writeToCSV,
 } from "./utils";
+import pLimit from "p-limit";
 
-interface SkuInput {
+export interface SkuInput {
   Type: "Amazon" | "Walmart";
   SKU: string;
 }
 
-async function runSingleAmazonExtraction(browser: any, testSku: string) {
+export async function runSingleAmazonExtraction(browser: any, testSku: string) {
   console.log(`Starting Amazon extraction for SKU: ${testSku}...`);
   let context: any;
   let page: any;
@@ -104,7 +105,10 @@ async function runSingleAmazonExtraction(browser: any, testSku: string) {
   }
 }
 
-async function runSingleWalmartExtraction(browser: any, testSku: string) {
+export async function runSingleWalmartExtraction(
+  browser: any,
+  testSku: string,
+) {
   console.log(`Starting extraction for SKU: ${testSku}...`);
   let pageAmazon: any;
   let pageWalmart: any;
@@ -434,33 +438,68 @@ async function runSingleWalmartExtraction(browser: any, testSku: string) {
   }
 }
 
+export async function processAmazonConcurrent(
+  amazonSkus: SkuInput[],
+  concurrencyLimit = 3,
+) {
+  if (amazonSkus.length === 0) return;
+  console.log(`Processing ${amazonSkus.length} Amazon SKUs concurrently...`);
+  const limit = pLimit(concurrencyLimit);
+
+  const amazonTasks = amazonSkus.map((skuObj) => {
+    return limit(async () => {
+      let browser = null;
+      try {
+        browser = await createBrowser(false); // Launches fresh headless browser
+        const productData = await runSingleAmazonExtraction(
+          browser,
+          skuObj.SKU,
+        );
+        if (productData) {
+          await writeToCSV([productData]);
+        }
+      } finally {
+        if (browser) {
+          await browser.close().catch(() => null);
+        }
+      }
+    });
+  });
+
+  await Promise.all(amazonTasks);
+  console.log(`Finished processing all Amazon SKUs.`);
+}
+
 async function main() {
   const rawData = fs.readFileSync("skus.json", "utf-8");
   const skus: { skus: SkuInput[] } = JSON.parse(rawData);
 
   console.log(`Starting extraction process for ${skus.skus.length} items...`);
 
-  for (let iteration = 0; iteration < 100; iteration++) {
-    console.log(`\n\n=== STRESS TEST ITERATION ${iteration + 1} / 100 ===\n\n`);
+  const amazonSkus = skus.skus.filter((s) => s.Type === "Amazon");
+  const walmartSkus = skus.skus.filter((s) => s.Type === "Walmart");
 
-    for (let i = 0; i < skus.skus.length; i++) {
-      const skuObj = skus.skus[i];
-      console.log(
-        `Processing item ${i + 1}/${skus.skus.length}: [${skuObj.Type}] ${skuObj.SKU}`,
-      );
+  // Run a single combined extraction process (not a stress test) to fulfill requirements
+  console.log(`\n\n=== STARTING EXTRACTION RUN ===\n\n`);
 
-      let productData = null;
+  // 1. Process Amazon SKUs concurrently
+  await processAmazonConcurrent(amazonSkus, 3);
+
+  // 2. Process Walmart SKUs sequentially
+  if (walmartSkus.length > 0) {
+    console.log(
+      `\nProcessing ${walmartSkus.length} Walmart SKUs sequentially (requires debug browser)...`,
+    );
+
+    for (let i = 0; i < walmartSkus.length; i++) {
+      const skuObj = walmartSkus[i];
       let browser = null;
-
       try {
-        if (skuObj.Type === "Walmart") {
-          browser = await createBrowser(true); // Connects to existing debug port 9222
-          productData = await runSingleWalmartExtraction(browser, skuObj.SKU);
-        } else if (skuObj.Type === "Amazon") {
-          browser = await createBrowser(false); // Launches fresh headless browser
-          productData = await runSingleAmazonExtraction(browser, skuObj.SKU);
-        }
-
+        browser = await createBrowser(true); // Connects to existing debug port 9222
+        const productData = await runSingleWalmartExtraction(
+          browser,
+          skuObj.SKU,
+        );
         if (productData) {
           await writeToCSV([productData]);
         }
@@ -470,20 +509,17 @@ async function main() {
         }
       }
 
-      if (i < skus.skus.length - 1) {
+      if (i < walmartSkus.length - 1) {
         const delay = 5000 + Math.random() * 5000;
         console.log(
-          `Waiting ${Math.round(delay / 1000)}s before next extraction...`,
+          `Waiting ${Math.round(delay / 1000)}s before next Walmart extraction...`,
         );
         await sleep(delay);
       }
     }
-
-    console.log(`Finished iteration ${iteration + 1}. Taking a short break...`);
-    await sleep(5000 + Math.random() * 5000);
   }
 
-  console.log("Scraping completed.");
+  console.log("\nScraping completed.");
 }
 
 main().catch(console.error);

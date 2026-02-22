@@ -213,14 +213,17 @@ export async function withRetry<T>(
 ): Promise<T | null> {
   const { retries = 3, baseDelay = 3000, sku, source } = options;
 
-  for (let attempt = 1; attempt <= retries; attempt++) {
+  // Try at least once, then up to `retries` additional times.
+  const maxAttempts = retries + 1;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await fn();
     } catch (err: any) {
       const message = err?.message || String(err);
       logError(sku, source, `Attempt ${attempt} failed: ${message}`, attempt);
 
-      if (attempt === retries) {
+      if (attempt === maxAttempts) {
         logError(sku, source, "All retry attempts exhausted");
         return null;
       }
