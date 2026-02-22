@@ -634,6 +634,100 @@ export async function runWalmartHttpExtraction(sku: string) {
   }
 }
 
+export async function processWalmartConcurrent(
+  skus: SkuInput[],
+  concurrencyLimit: number = 3,
+) {
+  console.log(
+    `\nProcessing ${skus.length} Walmart SKUs utilizing a Worker Pool (Max Concurrency: ${concurrencyLimit})...`,
+  );
+
+  const activeWorkerCount = Math.min(skus.length, concurrencyLimit);
+  const workers = Array.from({ length: activeWorkerCount }).map((_, i) => ({
+    id: i,
+    browser: null as any,
+    needsWarmup: true,
+  }));
+
+  try {
+    console.log(
+      `[Walmart] Initializing ${activeWorkerCount} dedicated Chrome workers with staggered delays...`,
+    );
+
+    // We launch them sequentially with a large random delay to avoid triggering PerimeterX
+    // on perfectly simultaneous connections from the same IP address.
+    for (let i = 0; i < workers.length; i++) {
+      const worker = workers[i];
+      console.log(`[Walmart] Spawning Worker ${worker.id}...`);
+      worker.browser = await createBrowser(false, undefined, worker.id);
+
+      // Delay before spawning the next worker
+      if (i < workers.length - 1) {
+        const startupDelay = 15000 + Math.random() * 10000; // 15s to 25s
+        console.log(
+          `[Walmart] Staggering next worker launch by ${Math.round(startupDelay / 1000)}s...`,
+        );
+        await sleep(startupDelay);
+      }
+    }
+
+    // Maintain a shared queue across all workers
+    const queue = [...skus];
+
+    // Distribute work to all workers actively pulling from the queue
+    const workerPromises = workers.map(async (worker) => {
+      while (queue.length > 0) {
+        const skuObj = queue.shift();
+        if (!skuObj) break; // queue empty
+
+        try {
+          const productData = await runSingleWalmartExtraction(
+            worker.browser,
+            skuObj.SKU,
+            worker.needsWarmup,
+          );
+
+          if (productData) {
+            await writeToCSV([productData]);
+          }
+
+          // Once the worker scrapes its first SKU, its profile is fully populated with cookies/history.
+          // Subsequent extractions by this exact worker no longer need the 30-second browsing warmup.
+          worker.needsWarmup = false;
+        } catch (error) {
+          console.error(
+            `[Worker ${worker.id}] Error extracting SKU ${skuObj.SKU}:`,
+            error,
+          );
+        }
+
+        // Small delay between requests on the same worker
+        if (queue.length > 0) {
+          const delay = 5000 + Math.random() * 5000;
+          console.log(
+            `[Worker ${worker.id}] Waiting ${Math.round(delay / 1000)}s before handling its next item...`,
+          );
+          await sleep(delay);
+        }
+      }
+    });
+
+    // Wait until the queue is completely drained by the workers
+    await Promise.all(workerPromises);
+  } finally {
+    console.log(
+      `[Walmart] All items processed. Shutting down worker browsers...`,
+    );
+    await Promise.all(
+      workers.map(async (worker) => {
+        if (worker.browser) {
+          await worker.browser.close().catch(() => null);
+        }
+      }),
+    );
+  }
+}
+
 async function main() {
   const rawData = fs.readFileSync("skus.json", "utf-8");
   const skus: { skus: SkuInput[] } = JSON.parse(rawData);
@@ -646,41 +740,13 @@ async function main() {
   console.log(`\n\n=== STARTING EXTRACTION RUN ===\n\n`);
 
   // 1. Process Amazon SKUs concurrently
-  await processAmazonConcurrent(amazonSkus, 3);
+  if (amazonSkus.length > 0) {
+    await processAmazonConcurrent(amazonSkus, 3);
+  }
 
-  // 2. Process Walmart SKUs via browser with CAPTCHA auto-solve
+  // 2. Process Walmart SKUs leveraging the Worker Pool
   if (walmartSkus.length > 0) {
-    console.log(
-      `\nProcessing ${walmartSkus.length} Walmart SKUs with CAPTCHA auto-solve...`,
-    );
-
-    for (let i = 0; i < walmartSkus.length; i++) {
-      const skuObj = walmartSkus[i];
-      let browser = null;
-      try {
-        browser = await createBrowser(true); // Connects to existing debug port 9222
-        const productData = await runSingleWalmartExtraction(
-          browser,
-          skuObj.SKU,
-          i === 0,
-        );
-        if (productData) {
-          await writeToCSV([productData]);
-        }
-      } finally {
-        if (browser) {
-          await browser.close().catch(() => null);
-        }
-      }
-
-      if (i < walmartSkus.length - 1) {
-        const delay = 5000 + Math.random() * 5000;
-        console.log(
-          `Waiting ${Math.round(delay / 1000)}s before next Walmart extraction...`,
-        );
-        await sleep(delay);
-      }
-    }
+    await processWalmartConcurrent(walmartSkus, 3);
   }
 
   console.log("\nScraping completed.");

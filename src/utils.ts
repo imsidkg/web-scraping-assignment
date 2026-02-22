@@ -412,6 +412,124 @@ const DEVICE_PROFILES: DeviceProfile[] = [
 // Track spawned Chrome processes for cleanup (legacy approach)
 const spawnedChromes: { process: any; port: number; dataDir: string }[] = [];
 
+function findChromeBinary(): string {
+  const candidates = [
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", // macOS
+  ];
+  for (const bin of candidates) {
+    if (fs.existsSync(bin)) return bin;
+  }
+  throw new Error(
+    "Could not find Chrome/Chromium binary. Install Google Chrome first.",
+  );
+}
+
+/**
+ * Launch a clean Chrome subprocess with NO Playwright flags.
+ * Only adds --remote-debugging-port so we can connect via CDP.
+ * This is the ONLY approach that passes Walmart's PerimeterX.
+ */
+export async function launchCleanChrome(
+  port = 9222,
+  workerId?: number,
+): Promise<any> {
+  const { spawn } = await import("child_process");
+  const chromeBin = findChromeBinary();
+  const dirName =
+    typeof workerId === "number"
+      ? `chrome-profile-worker-${workerId}`
+      : `chrome-profile-${port}`;
+  const dataDir = path.resolve(process.cwd(), dirName);
+
+  const profile = getRandomProfile();
+
+  console.log(
+    `[Worker ${workerId ?? "Main"}] Launching clean Chrome subprocess on port ${port}...`,
+  );
+  console.log(`  Device: ${profile.name}`);
+  console.log(`  User-Agent: ${profile.userAgent.substring(0, 60)}...`);
+  console.log(`  Profile: ${dirName}`);
+
+  // Kill any existing Chrome on this port
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/json/version`);
+    if (response.ok) {
+      console.log(
+        `  Port ${port} already in use, connecting to existing instance...`,
+      );
+      return await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+    }
+  } catch {
+    // Port is free
+  }
+
+  const chromeProcess = spawn(chromeBin, [
+    `--remote-debugging-port=${port}`,
+    `--user-data-dir=${dataDir}`,
+    `--user-agent=${profile.userAgent}`,
+    `--window-size=${profile.viewport.width},${profile.viewport.height}`,
+    "--no-first-run",
+    "--no-default-browser-check",
+    // These arguments prevent background interference and fingerprinting
+    "--disable-background-networking",
+    "--disable-background-timer-throttling",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-breakpad",
+    "--disable-client-side-phishing-detection",
+    "--disable-component-update",
+    "--disable-default-apps",
+    "--disable-dev-shm-usage",
+    "--disable-domain-reliability",
+    "--disable-features=AudioServiceOutOfProcess",
+    "--disable-hang-monitor",
+    "--disable-ipc-flooding-protection",
+    "--disable-popup-blocking",
+    "--disable-prompt-on-repost",
+    "--disable-renderer-backgrounding",
+    "--disable-sync",
+    "--force-color-profile=srgb",
+    "--metrics-recording-only",
+    "--no-first-run",
+    "--safebrowsing-disable-auto-update",
+    "--password-store=basic",
+    "--use-mock-keychain",
+  ]);
+
+  spawnedChromes.push({ process: chromeProcess, port, dataDir });
+
+  // Wait for CDP to be ready
+  let connected = false;
+  for (let i = 0; i < 30; i++) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/json/version`);
+      if (response.ok) {
+        connected = true;
+        break;
+      }
+    } catch {
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+
+  if (!connected) {
+    throw new Error(`Failed to connect to Chrome on port ${port} after 15s`);
+  }
+
+  console.log(`  Successfully connected to Chrome CDP on port ${port}`);
+
+  // Connect Playwright to the running instance
+  const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+
+  // Attach profile so createContext can use it
+  (browser as any)._profile = profile;
+
+  return browser;
+}
+
 // Cleanup on exit
 export function cleanupChromes() {
   for (const chrome of spawnedChromes) {
@@ -441,57 +559,12 @@ function getRandomProfile(): DeviceProfile {
 
 export async function createBrowser(
   useExistingDebugInstance = true,
-  extensionPath?: string,
+  extensionPath?: string, // Legacy compatibility, not used in clean spawn
+  workerId?: number,
 ) {
-  const port = 9222;
-  const dataDir = path.resolve(process.cwd(), `chrome-profile-${port}`);
-  const profile = getRandomProfile();
-
-  console.log(`Launching Playwright persistent context with Chrome...`);
-  console.log(`  Device: ${profile.name}`);
-  console.log(`  Profile: ${dataDir}`);
-
-  const args = [
-    "--disable-blink-features=AutomationControlled",
-    "--disable-infobars",
-  ];
-
-  if (extensionPath) {
-    const absExtensionPath = path.resolve(process.cwd(), extensionPath);
-    args.push(`--disable-extensions-except=${absExtensionPath}`);
-    args.push(`--load-extension=${absExtensionPath}`);
-    console.log(`  Extension: ${absExtensionPath}`);
-  }
-
-  const context = await chromium.launchPersistentContext(dataDir, {
-    channel: "chrome",
-    headless: false,
-    userAgent: profile.userAgent,
-    viewport: profile.viewport,
-    deviceScaleFactor: profile.deviceScaleFactor,
-    isMobile: profile.isMobile,
-    hasTouch: profile.hasTouch,
-    locale: profile.locale,
-    timezoneId: profile.timezoneId,
-    args,
-    ignoreDefaultArgs: ["--enable-automation"],
-  });
-
-  // Attach profile properties to the context so we can use them later if needed
-  (context as any)._profile = profile;
-
-  // Wrap context to behave like browser for compatibility
-  return {
-    isPersistentContext: true,
-    contexts: () => [context],
-    newContext: async () => context,
-    close: async () => {
-      console.log("Closing persistent context...");
-      await context.close().catch(() => null);
-    },
-    _profile: profile,
-    context,
-  };
+  // If concurrent, assign an isolated port 9222 based on workerID. e.g. Worker 0 = 9222, Worker 1 = 9223...
+  const port = workerId !== undefined ? 9222 + workerId : 9222;
+  return await launchCleanChrome(port, workerId);
 }
 
 export async function createContext(browser: any) {
