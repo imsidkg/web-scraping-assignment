@@ -26,6 +26,7 @@ interface DeviceProfile {
 }
 
 const DEVICE_PROFILES: DeviceProfile[] = [
+  /*
   // ===== DESKTOP — Chrome =====
   // Chrome 120 — Windows 10
   {
@@ -368,6 +369,7 @@ const DEVICE_PROFILES: DeviceProfile[] = [
     locale: "en-US",
     timezoneId: "America/Chicago",
   },
+  */
 
   // ===== MOBILE — BlackBerry =====
   {
@@ -381,6 +383,7 @@ const DEVICE_PROFILES: DeviceProfile[] = [
     locale: "en-US",
     timezoneId: "America/New_York",
   },
+  /*
   {
     name: "BlackBerry Passport",
     userAgent:
@@ -403,102 +406,13 @@ const DEVICE_PROFILES: DeviceProfile[] = [
     locale: "en-US",
     timezoneId: "America/Denver",
   },
+  */
 ];
 
-// Track spawned Chrome processes for cleanup
+// Track spawned Chrome processes for cleanup (legacy approach)
 const spawnedChromes: { process: any; port: number; dataDir: string }[] = [];
 
-function findChromeBinary(): string {
-  const candidates = [
-    "/usr/bin/google-chrome",
-    "/usr/bin/google-chrome-stable",
-    "/usr/bin/chromium-browser",
-    "/usr/bin/chromium",
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", // macOS
-  ];
-  for (const bin of candidates) {
-    if (fs.existsSync(bin)) return bin;
-  }
-  throw new Error("Could not find Chrome/Chromium binary. Install Google Chrome first.");
-}
-
-/**
- * Launch a clean Chrome subprocess with NO Playwright flags.
- * Only adds --remote-debugging-port so we can connect via CDP.
- * This is the ONLY approach that passes Walmart's PerimeterX.
- */
-export async function launchCleanChrome(port = 9222): Promise<any> {
-  const { spawn } = await import("child_process");
-  const chromeBin = findChromeBinary();
-  const dataDir = path.resolve(process.cwd(), `chrome-profile-${port}`);
-
-  const profile = getRandomProfile();
-
-  console.log(`Launching clean Chrome subprocess on port ${port}...`);
-  console.log(`  Device: ${profile.name}`);
-  console.log(`  User-Agent: ${profile.userAgent.substring(0, 60)}...`);
-  console.log(`  Profile: ${dataDir}`);
-
-  // Kill any existing Chrome on this port
-  try {
-    const response = await fetch(`http://127.0.0.1:${port}/json/version`);
-    if (response.ok) {
-      console.log(`  Port ${port} already in use, connecting to existing instance...`);
-      return await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
-    }
-  } catch {
-    // Port is free
-  }
-
-  const chromeProcess = spawn(chromeBin, [
-    `--remote-debugging-port=${port}`,
-    `--user-data-dir=${dataDir}`,
-    `--user-agent=${profile.userAgent}`,
-    `--window-size=${profile.viewport.width},${profile.viewport.height}`,
-    "--no-first-run",
-    "--no-default-browser-check",
-    // These arguments prevent background interference and fingerprinting
-    "--disable-blink-features=AutomationControlled",
-    "--disable-infobars",
-    "--lang=" + profile.locale,
-  ], {
-    stdio: "ignore",
-    detached: true,
-  });
-
-  chromeProcess.unref();
-  spawnedChromes.push({ process: chromeProcess, port, dataDir });
-
-  // Wait for Chrome to be ready
-  for (let attempt = 0; attempt < 30; attempt++) {
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/json/version`);
-      if (response.ok) {
-        console.log(`  ✓ Chrome is ready on port ${port}`);
-        break;
-      }
-    } catch {
-      await sleep(500);
-    }
-  }
-
-  // Connect via CDP
-  const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
-  
-  // Create context with the profile
-  const context = await browser.contexts()[0] || await browser.newContext();
-  context.setDefaultTimeout(30000);
-  
-  // Attach profile properties to the browser object so we can use them later if needed
-  (browser as any)._profile = profile;
-
-  console.log(`  ✓ Connected via CDP with realistic fingerprint`);
-  return browser;
-}
-
-/**
- * Kill all spawned Chrome processes
- */
+// Cleanup on exit
 export function cleanupChromes() {
   for (const chrome of spawnedChromes) {
     try {
@@ -509,11 +423,15 @@ export function cleanupChromes() {
   }
   spawnedChromes.length = 0;
 }
-
-// Cleanup on exit
 process.on("exit", cleanupChromes);
-process.on("SIGINT", () => { cleanupChromes(); process.exit(0); });
-process.on("SIGTERM", () => { cleanupChromes(); process.exit(0); });
+process.on("SIGINT", () => {
+  cleanupChromes();
+  process.exit(0);
+});
+process.on("SIGTERM", () => {
+  cleanupChromes();
+  process.exit(0);
+});
 
 function getRandomProfile(): DeviceProfile {
   const profile =
@@ -521,19 +439,75 @@ function getRandomProfile(): DeviceProfile {
   return profile;
 }
 
-export async function createBrowser(useExistingDebugInstance = true) {
-  // We use our clean subprocess CDP launcher to bypass PerimeterX while automating execution
-  return await launchCleanChrome(9222);
+export async function createBrowser(
+  useExistingDebugInstance = true,
+  extensionPath?: string,
+) {
+  const port = 9222;
+  const dataDir = path.resolve(process.cwd(), `chrome-profile-${port}`);
+  const profile = getRandomProfile();
+
+  console.log(`Launching Playwright persistent context with Chrome...`);
+  console.log(`  Device: ${profile.name}`);
+  console.log(`  Profile: ${dataDir}`);
+
+  const args = [
+    "--disable-blink-features=AutomationControlled",
+    "--disable-infobars",
+  ];
+
+  if (extensionPath) {
+    const absExtensionPath = path.resolve(process.cwd(), extensionPath);
+    args.push(`--disable-extensions-except=${absExtensionPath}`);
+    args.push(`--load-extension=${absExtensionPath}`);
+    console.log(`  Extension: ${absExtensionPath}`);
+  }
+
+  const context = await chromium.launchPersistentContext(dataDir, {
+    channel: "chrome",
+    headless: false,
+    userAgent: profile.userAgent,
+    viewport: profile.viewport,
+    deviceScaleFactor: profile.deviceScaleFactor,
+    isMobile: profile.isMobile,
+    hasTouch: profile.hasTouch,
+    locale: profile.locale,
+    timezoneId: profile.timezoneId,
+    args,
+    ignoreDefaultArgs: ["--enable-automation"],
+  });
+
+  // Attach profile properties to the context so we can use them later if needed
+  (context as any)._profile = profile;
+
+  // Wrap context to behave like browser for compatibility
+  return {
+    isPersistentContext: true,
+    contexts: () => [context],
+    newContext: async () => context,
+    close: async () => {
+      console.log("Closing persistent context...");
+      await context.close().catch(() => null);
+    },
+    _profile: profile,
+    context,
+  };
 }
 
 export async function createContext(browser: any) {
+  if (browser.isPersistentContext) {
+    return browser.context;
+  }
+
   const contexts = browser.contexts();
   let context = contexts.length > 0 ? contexts[0] : await browser.newContext();
-  
+
   // If we attached a profile during launch, ensure the context uses it for new pages
   const profile = (browser as any)._profile;
   if (profile && contexts.length === 0) {
-    console.log(`Creating fallback context matching device: ${profile.name}...`);
+    console.log(
+      `Creating fallback context matching device: ${profile.name}...`,
+    );
     context = await browser.newContext({
       userAgent: profile.userAgent,
       viewport: profile.viewport,

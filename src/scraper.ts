@@ -112,6 +112,7 @@ export async function runSingleAmazonExtraction(browser: any, testSku: string) {
 export async function runSingleWalmartExtraction(
   browser: any,
   testSku: string,
+  needsWarmup: boolean = false,
 ) {
   console.log(`\n--- Starting Walmart extraction for SKU: ${testSku} ---`);
   let context: any;
@@ -120,49 +121,51 @@ export async function runSingleWalmartExtraction(
     context = await createContext(browser);
 
     // ===== PHASE 1: Warm-up browsing with natural mouse movement =====
-    const warmupSites = [
-      { url: "https://youtube.com", name: "YouTube" },
-      { url: "https://wikipedia.org", name: "Wikipedia" },
-      { url: "https://amazon.com", name: "Amazon" },
-    ];
+    if (needsWarmup) {
+      const warmupSites = [
+        { url: "https://youtube.com", name: "YouTube" },
+        { url: "https://wikipedia.org", name: "Wikipedia" },
+        { url: "https://amazon.com", name: "Amazon" },
+      ];
 
-    for (const site of warmupSites) {
-      console.log(`  [Warm-up] Opening new tab for ${site.name}...`);
-      const tab = await context.newPage();
+      for (const site of warmupSites) {
+        console.log(`  [Warm-up] Opening new tab for ${site.name}...`);
+        const tab = await context.newPage();
 
-      await tab
-        .goto(site.url, { waitUntil: "domcontentloaded", timeout: 20000 })
-        .catch(() => null);
-      await sleep(1000 + Math.random() * 2000);
+        await tab
+          .goto(site.url, { waitUntil: "domcontentloaded", timeout: 20000 })
+          .catch(() => null);
+        await sleep(1000 + Math.random() * 2000);
 
-      const vp = tab.viewportSize() || { width: 1920, height: 1080 };
+        const vp = tab.viewportSize() || { width: 1920, height: 1080 };
 
-      // Random Bézier mouse movements + scrolls
-      const rounds = 1 + Math.floor(Math.random() * 5);
-      for (let s = 0; s < rounds; s++) {
-        await humanMouseMove(
-          tab,
-          100 + Math.random() * (vp.width - 200),
-          100 + Math.random() * (vp.height - 200),
-        );
-        await sleep(300 + Math.random() * 700);
+        // Random Bézier mouse movements + scrolls
+        const rounds = 1 + Math.floor(Math.random() * 5);
+        for (let s = 0; s < rounds; s++) {
+          await humanMouseMove(
+            tab,
+            100 + Math.random() * (vp.width - 200),
+            100 + Math.random() * (vp.height - 200),
+          );
+          await sleep(300 + Math.random() * 700);
 
-        await tab.evaluate(() => {
-          window.scrollBy({
-            top: 200 + Math.random() * 400,
-            behavior: "smooth",
+          await tab.evaluate(() => {
+            window.scrollBy({
+              top: 200 + Math.random() * 400,
+              behavior: "smooth",
+            });
           });
-        });
-        await sleep(1000 + Math.random() * 4000);
+          await sleep(1000 + Math.random() * 4000);
 
-        await humanMouseMove(
-          tab,
-          100 + Math.random() * (vp.width - 200),
-          50 + Math.random() * (vp.height - 100),
-        );
-        await sleep(200 + Math.random() * 500);
+          await humanMouseMove(
+            tab,
+            100 + Math.random() * (vp.width - 200),
+            50 + Math.random() * (vp.height - 100),
+          );
+          await sleep(200 + Math.random() * 500);
+        }
+        console.log(`  [Warm-up] Done with ${site.name} (${rounds} rounds)`);
       }
-      console.log(`  [Warm-up] Done with ${site.name} (${rounds} rounds)`);
     }
 
     // ===== PHASE 2: Navigate to Walmart in a new tab =====
@@ -584,6 +587,7 @@ async function main() {
         const productData = await runSingleWalmartExtraction(
           browser,
           skuObj.SKU,
+          i === 0,
         );
         if (productData) {
           await writeToCSV([productData]);
