@@ -19,18 +19,26 @@ export interface ProductData {
 
 // Removed dynamic user agent and viewport generation as we are now using the default browser context.
 
-export async function createBrowser(proxyUrl?: string) {
-  console.log("Connecting to existing Chrome instance on port 9222...");
-  try {
-    // Connect to an already running Chrome instance that was launched with --remote-debugging-port=9222
-    return await chromium.connectOverCDP("http://127.0.0.1:9222");
-  } catch (err) {
-    console.error("Failed to connect to existing Chrome instance.");
-    console.error(
-      "Make sure you started your physical Chrome browser from the terminal using:",
-    );
-    console.error("google-chrome --remote-debugging-port=9222");
-    throw err;
+export async function createBrowser(useExistingDebugInstance = true) {
+  if (useExistingDebugInstance) {
+    console.log("Connecting to existing Chrome instance on port 9222...");
+    try {
+      // Connect to an already running Chrome instance that was launched with --remote-debugging-port=9222
+      return await chromium.connectOverCDP("http://127.0.0.1:9222");
+    } catch (err) {
+      console.error("Failed to connect to existing Chrome instance.");
+      console.error(
+        "Make sure you started your physical Chrome browser from the terminal using:",
+      );
+      console.error("google-chrome --remote-debugging-port=9222");
+      throw err;
+    }
+  } else {
+    console.log("Launching fresh, hidden Chrome instance...");
+    return await chromium.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
   }
 }
 

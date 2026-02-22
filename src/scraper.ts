@@ -13,6 +13,87 @@ interface SkuInput {
   SKU: string;
 }
 
+async function runSingleAmazonExtraction(browser: any, testSku: string) {
+  console.log(`Starting Amazon extraction for SKU: ${testSku}...`);
+  let context: any;
+  let page: any;
+
+  try {
+    context = await createContext(browser);
+    page = await context.newPage();
+
+    console.log(`Navigating to https://www.amazon.com/dp/${testSku}...`);
+    await page.goto(`https://www.amazon.com/dp/${testSku}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 30000,
+    });
+
+    await sleep(1500 + Math.random() * 2000);
+    console.log("Simulating human behavior...");
+    await simulateHumanBehavior(page);
+
+    // Wait for key element
+    await page
+      .waitForSelector("#productTitle", { timeout: 10000 })
+      .catch(() => null);
+
+    // Extract with fallbacks
+    const title = await page
+      .$eval("#productTitle", (el: Element) => el.textContent?.trim() || null)
+      .catch(() => null);
+
+    const price = await page
+      .$eval(
+        ".a-price .a-offscreen, #priceblock_ourprice, #priceblock_dealprice",
+        (el: Element) => el.textContent?.trim() || null,
+      )
+      .catch(() => null);
+
+    const description = await page
+      .$eval(
+        "#productDescription p, #feature-bullets .a-list-item",
+        (el: Element) => el.textContent?.trim() || null,
+      )
+      .catch(() => null);
+
+    const reviews = await page
+      .$eval(
+        "#acrCustomerReviewText",
+        (el: Element) => el.textContent?.trim() || null,
+      )
+      .catch(() => null);
+
+    const rating = await page
+      .$eval(
+        'span[data-hook="rating-out-of-text"], .a-icon-alt',
+        (el: Element) => el.textContent?.trim() || null,
+      )
+      .catch(() => null);
+
+    console.log(`\n[Amazon] Scraped complete for SKU ${testSku}`);
+    const productData = {
+      sku: testSku,
+      source: "Amazon",
+      title,
+      price,
+      description,
+      reviews,
+      rating,
+    };
+
+    console.log(JSON.stringify(productData, null, 2));
+    return productData;
+  } catch (error) {
+    console.error(`Error scraping Amazon SKU ${testSku}:`, error);
+    return null;
+  } finally {
+    console.log("Closing Amazon context to ensure isolation...");
+    if (context) {
+      await context.close().catch(() => null);
+    }
+  }
+}
+
 async function runSingleWalmartExtraction(browser: any, testSku: string) {
   console.log(`Starting extraction for SKU: ${testSku}...`);
   let pageAmazon: any;
@@ -349,28 +430,37 @@ async function main() {
 
   console.log(`Starting extraction process for ${skus.skus.length} items...`);
 
-  const browser = await createBrowser();
-
-  // We only added Walmart SKUs recently so let's filter just them
-  const walmartSkus = skus.skus.filter((s) => s.Type === "Walmart");
-
   for (let iteration = 0; iteration < 100; iteration++) {
     console.log(`\n\n=== STRESS TEST ITERATION ${iteration + 1} / 100 ===\n\n`);
 
-    for (let i = 0; i < walmartSkus.length; i++) {
-      const skuObj = walmartSkus[i];
+    for (let i = 0; i < skus.skus.length; i++) {
+      const skuObj = skus.skus[i];
       console.log(
-        `Processing item ${i + 1}/${walmartSkus.length}: ${skuObj.SKU}`,
+        `Processing item ${i + 1}/${skus.skus.length}: [${skuObj.Type}] ${skuObj.SKU}`,
       );
 
-      // Call the single-run scraper logic over and over
-      const productData = await runSingleWalmartExtraction(browser, skuObj.SKU);
+      let productData = null;
+      let browser = null;
 
-      if (productData) {
-        await writeToCSV([productData]);
+      try {
+        if (skuObj.Type === "Walmart") {
+          browser = await createBrowser(true); // Connects to existing debug port 9222
+          productData = await runSingleWalmartExtraction(browser, skuObj.SKU);
+        } else if (skuObj.Type === "Amazon") {
+          browser = await createBrowser(false); // Launches fresh headless browser
+          productData = await runSingleAmazonExtraction(browser, skuObj.SKU);
+        }
+
+        if (productData) {
+          await writeToCSV([productData]);
+        }
+      } finally {
+        if (browser) {
+          await browser.close().catch(() => null);
+        }
       }
 
-      if (i < walmartSkus.length - 1) {
+      if (i < skus.skus.length - 1) {
         const delay = 5000 + Math.random() * 5000;
         console.log(
           `Waiting ${Math.round(delay / 1000)}s before next extraction...`,
@@ -384,8 +474,6 @@ async function main() {
   }
 
   console.log("Scraping completed.");
-
-  await browser.close().catch(() => null);
 }
 
 main().catch(console.error);
