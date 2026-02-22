@@ -28,6 +28,16 @@ async function runSingleAmazonExtraction(browser: any, testSku: string) {
       timeout: 30000,
     });
 
+    // Check for a CAPTCHA "Continue" button as requested by user
+    const continueButton = await page.$(
+      'button:has-text("Continue"), a:has-text("Continue"), input[type="submit"][value="Continue"]',
+    );
+    if (continueButton) {
+      console.log("Found a CAPTCHA 'Continue' button. Clicking to bypass...");
+      await continueButton.click();
+      await sleep(2000); // Give it a moment to load the real page
+    }
+
     await sleep(1500 + Math.random() * 2000);
     console.log("Simulating human behavior...");
     await simulateHumanBehavior(page);
