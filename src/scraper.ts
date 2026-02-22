@@ -300,6 +300,15 @@ async function extractWalmartProductData(page: any, sku: string) {
   // Simulate some human behavior on the product page
   await simulateHumanBehavior(page);
 
+  // Scroll to bottom to trigger lazy-loaded reviews and ratings sections
+  await page.evaluate(() => {
+    window.scrollTo({
+      top: document.body.scrollHeight,
+      behavior: "smooth",
+    });
+  });
+  await sleep(1500); // Give time for lazy elements to render
+
   const title = await page
     .$eval(
       'h1[itemprop="name"], h1.prod-ProductTitle, [data-testid="product-title"], h1',
@@ -321,19 +330,85 @@ async function extractWalmartProductData(page: any, sku: string) {
     )
     .catch(() => null);
 
-  const reviews = await page
-    .$eval(
-      '[itemprop="reviewCount"], [data-testid="reviews-count"], .stars-reviews-count-node',
-      (el: Element) => el.textContent?.trim() || null,
-    )
-    .catch(() => null);
+  // Try extracting ratings and reviews robustly via text content search
+  // since Walmart rotates CSS classes and DOM structures heavily
+  const { reviews, rating } = await page
+    .evaluate(() => {
+      let rCount: string | null = null;
+      let rValue: string | null = null;
 
-  const rating = await page
-    .$eval(
-      '[itemprop="ratingValue"], [data-testid="product-ratings"] span, .stars-container',
-      (el: Element) => el.textContent?.trim() || null,
-    )
-    .catch(() => null);
+      // 1. Try explicit datatest-id elements first
+      const reviewEl = document.querySelector(
+        '[data-testid="product-reviews"]',
+      );
+      if (reviewEl) rCount = reviewEl.textContent?.trim() || null;
+
+      // 2. Fetch allText prioritizing the "Hero" section of the page near the stars!
+      // This prevents the regex from accidentally capturing ratings from "Similar Items" lower on the page.
+      // We STRICTLY do not fall back to document.body, because if a product has 0 reviews,
+      // falling back to the body will cause it to extract ratings from "Sponsored Products".
+      let allText = "";
+      const queryContainers = [
+        document.querySelector('[data-testid="reviews-and-ratings"]'),
+        document.querySelector('[data-testid="product-reviews"]')?.parentElement
+          ?.parentElement,
+        document.querySelector('[itemprop="aggregateRating"]')?.parentElement,
+      ];
+
+      for (const el of queryContainers) {
+        if (el && el.textContent) {
+          allText += " " + el.textContent;
+        }
+      }
+
+      // Look for "4.5 out of 5 Stars. 387 reviews" pattern
+      const combinedMatch = allText.match(
+        /(0\.\d+|[1-5](?:\.\d+)?)\s+out of 5[a-zA-Z\s\.]*(\d+(?:,\d+)?)\s+reviews/i,
+      );
+      if (combinedMatch) {
+        if (!rValue) rValue = combinedMatch[1];
+        if (!rCount) rCount = combinedMatch[2].replace(/,/g, "");
+      }
+
+      // Handle cases where React/Next.js concatenates them directly e.g. "3874.5 out of 5" -> 387 reviews, 4.5 rating
+      const squishedMatch = allText.match(
+        /(\d+)(?:reviews)?\s*(0\.\d+|[1-5](?:\.\d+)?)\s+out of 5/i,
+      );
+      if (squishedMatch && !rCount && !rValue) {
+        rCount = squishedMatch[1].replace(/,/g, "");
+        rValue = squishedMatch[2];
+      }
+
+      // Look for standalone "4.5 out of 5"
+      if (!rValue) {
+        const ratingMatch = allText.match(
+          /(0\.\d+|[1-5](?:\.\d+)?)\s+out of 5/i,
+        );
+        if (ratingMatch) rValue = ratingMatch[1];
+      }
+
+      // Look for standalone "387 reviews"
+      if (!rCount) {
+        const countMatch = allText.match(/(?:^|[^\d\.])([\d,]+)\s+reviews/i);
+        if (countMatch && !countMatch[1].includes(".")) {
+          rCount = countMatch[1].replace(/,/g, "");
+        }
+      }
+
+      // 3. Alternate Mobile Layout Check: "(4.6) | 98 ratings"
+      if (!rValue || !rCount) {
+        const altMatch = allText.match(
+          /\((0\.\d+|[1-5](?:\.\d+)?)\)\s*(?:[\|・★*~-])?\s*([\d,]+)\s*(?:ratings?|reviews?)/i,
+        );
+        if (altMatch) {
+          if (!rValue) rValue = altMatch[1];
+          if (!rCount) rCount = altMatch[2].replace(/,/g, "");
+        }
+      }
+
+      return { reviews: rCount, rating: rValue };
+    })
+    .catch(() => ({ reviews: null, rating: null }));
 
   const productData = {
     sku,
