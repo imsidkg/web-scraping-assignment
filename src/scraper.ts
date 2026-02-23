@@ -6,6 +6,7 @@ import {
   sleep,
   simulateHumanBehavior,
   writeToCSV,
+  withRetry,
 } from "./utils";
 import pLimit from "p-limit";
 
@@ -81,6 +82,10 @@ export async function runSingleAmazonExtraction(browser: any, testSku: string) {
       )
       .catch(() => null);
 
+    if (!title && !price) {
+      throw new Error(`Product data not found for SKU ${testSku}`);
+    }
+
     console.log(`\n[Amazon] Scraped complete for SKU ${testSku}`);
     const productData = {
       sku: testSku,
@@ -96,7 +101,7 @@ export async function runSingleAmazonExtraction(browser: any, testSku: string) {
     return productData;
   } catch (error) {
     console.error(`Error scraping Amazon SKU ${testSku}:`, error);
-    return null;
+    throw error;
   } finally {
     console.log("Closing Amazon context to ensure isolation...");
     if (context) {
@@ -406,6 +411,10 @@ export async function runSingleWalmartExtraction(
         rating = rating.replace(/\(|\)/g, "").trim();
       }
 
+      if (!title && !price) {
+        throw new Error(`Product data not found for Walmart SKU ${testSku}`);
+      }
+
       console.log(`\n[Walmart] Scraped complete for SKU ${testSku}`);
       const productData = {
         sku: testSku,
@@ -424,10 +433,10 @@ export async function runSingleWalmartExtraction(
     }
 
     console.log("Finished search and click step.");
-    return null;
+    throw new Error(`Failed to extract data for Walmart SKU ${testSku}`);
   } catch (error) {
     console.error("Error during execution:", error);
-    return null;
+    throw error;
   } finally {
     console.log("Closing the 3 created tabs to keep things clean...");
     try {
@@ -448,20 +457,23 @@ export async function processAmazonConcurrent(
 
   const amazonTasks = amazonSkus.map((skuObj) => {
     return limit(async () => {
-      let browser = null;
-      try {
-        browser = await createBrowser(false); // Launches fresh headless browser
-        const productData = await runSingleAmazonExtraction(
-          browser,
-          skuObj.SKU,
-        );
-        if (productData) {
-          await writeToCSV([productData]);
-        }
-      } finally {
-        if (browser) {
-          await browser.close().catch(() => null);
-        }
+      const productData = await withRetry(
+        async () => {
+          let browser = null;
+          try {
+            browser = await createBrowser(false); // Launches fresh headless browser
+            return await runSingleAmazonExtraction(browser, skuObj.SKU);
+          } finally {
+            if (browser) {
+              await browser.close().catch(() => null);
+            }
+          }
+        },
+        { sku: skuObj.SKU, source: "Amazon", retries: 2, baseDelay: 3000 },
+      );
+
+      if (productData) {
+        await writeToCSV([productData]);
       }
     });
   });
@@ -493,20 +505,23 @@ async function main() {
 
     for (let i = 0; i < walmartSkus.length; i++) {
       const skuObj = walmartSkus[i];
-      let browser = null;
-      try {
-        browser = await createBrowser(true); // Connects to existing debug port 9222
-        const productData = await runSingleWalmartExtraction(
-          browser,
-          skuObj.SKU,
-        );
-        if (productData) {
-          await writeToCSV([productData]);
-        }
-      } finally {
-        if (browser) {
-          await browser.close().catch(() => null);
-        }
+      const productData = await withRetry(
+        async () => {
+          let browser = null;
+          try {
+            browser = await createBrowser(true); // Connects to existing debug port 9222
+            return await runSingleWalmartExtraction(browser, skuObj.SKU);
+          } finally {
+            if (browser) {
+              await browser.close().catch(() => null); // Revert to close(), which handles CDP disconnect
+            }
+          }
+        },
+        { sku: skuObj.SKU, source: "Walmart", retries: 2, baseDelay: 5000 },
+      );
+
+      if (productData) {
+        await writeToCSV([productData]);
       }
 
       if (i < walmartSkus.length - 1) {

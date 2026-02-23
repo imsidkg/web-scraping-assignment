@@ -1,64 +1,64 @@
 {
   "skus": [
     {
-      "Type": "Amazon",
-      "SKU": "B0014C0LSY"
+      "Type": "Walmart",
+      "SKU": "16297972764"
     },
     {
-      "Type": "Amazon",
-      "SKU": "B0C2C9NHZW"
+      "Type": "Walmart",
+      "SKU": "18208603585"
     },
     {
-      "Type": "Amazon",
-      "SKU": "B0C33CHG99"
+      "Type": "Walmart",
+      "SKU": "18032722378"
     },
     {
-      "Type": "Amazon",
-      "SKU": "B0CHYBKQPM"
+      "Type": "Walmart",
+      "SKU": "19186061898"
     },
     {
-      "Type": "Amazon",
-      "SKU": "B09MG7535B"
+      "Type": "Walmart",
+      "SKU": "19229951937"
     },
     {
-      "Type": "Amazon",
-      "SKU": "B0FW4934Q9"
+      "Type": "Walmart",
+      "SKU": "17971153448"
     },
     {
-      "Type": "Amazon",
-      "SKU": "B0DRPCD2GZ"
+      "Type": "Walmart",
+      "SKU": "17917714337"
     },
     {
-      "Type": "Amazon",
-      "SKU": "B096F7NJ62"
+      "Type": "Walmart",
+      "SKU": "17763715657"
     },
     {
-      "Type": "Amazon",
-      "SKU": "B0CJDTC6ZB"
+      "Type": "Walmart",
+      "SKU": "17847106044"
     },
     {
-      "Type": "Amazon",
-      "SKU": "B08FM6GZSY"
+      "Type": "Walmart",
+      "SKU": "17593619676"
     },
     {
-      "Type": "Amazon",
-      "SKU": "B000MFN1G8"
+      "Type": "Walmart",
+      "SKU": "18767474176"
     },
     {
-      "Type": "Amazon",
-      "SKU": "B00006IA9F"
+      "Type": "Walmart",
+      "SKU": "17912662818"
     },
     {
-      "Type": "Amazon",
-      "SKU": "B004ZDL0K2"
+      "Type": "Walmart",
+      "SKU": "17116211311"
     },
     {
-      "Type": "Amazon",
-      "SKU": "B01EFPZHOO"
+      "Type": "Walmart",
+      "SKU": "15229820875"
     },
     {
-      "Type": "Amazon",
-      "SKU": "B086PMM18D"
+      "Type": "Walmart",
+      "SKU": "15144061334"
     },
     {
       "Type": "Walmart",
@@ -119,6 +119,286 @@
     {
       "Type": "Walmart",
       "SKU": "15144061334"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "16297972764"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "18208603585"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "18032722378"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "19186061898"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "19229951937"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17971153448"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17917714337"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17763715657"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17847106044"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17593619676"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "18767474176"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17912662818"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17116211311"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "15229820875"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "15144061334"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "16297972764"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "18208603585"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "18032722378"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "19186061898"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "19229951937"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17971153448"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17917714337"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17763715657"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17847106044"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17593619676"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "18767474176"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17912662818"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17116211311"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "15229820875"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "15144061334"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "16297972764"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "18208603585"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "18032722378"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "19186061898"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "19229951937"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17971153448"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17917714337"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17763715657"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17847106044"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17593619676"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "18767474176"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17912662818"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17116211311"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "15229820875"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "15144061334"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "16297972764"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "18208603585"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "18032722378"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "19186061898"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "19229951937"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17971153448"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17917714337"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17763715657"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17847106044"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17593619676"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "18767474176"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17912662818"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17116211311"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "15229820875"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "15144061334"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "16297972764"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "18208603585"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "18032722378"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "19186061898"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "19229951937"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17971153448"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17917714337"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17763715657"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17847106044"
+    },
+    {
+      "Type": "Walmart",
+      "SKU": "17593619676"
     }
   ]
 }
