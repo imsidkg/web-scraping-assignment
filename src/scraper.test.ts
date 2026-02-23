@@ -47,22 +47,9 @@ describe("Scraper", () => {
       // Mock createContext to return our mockContext
       vi.mocked(utils.createContext).mockResolvedValue(mockContext as any);
 
-      const result = await runSingleAmazonExtraction(
-        mockBrowser,
-        "MISSING_SKU",
-      );
-
-      // The function should catch the errors and return an object with null values, not crash
-      expect(result).not.toBeNull();
-      expect(result).toEqual({
-        sku: "MISSING_SKU",
-        source: "Amazon",
-        title: null,
-        description: null,
-        price: null,
-        rating: null,
-        reviews: null,
-      });
+      await expect(
+        runSingleAmazonExtraction(mockBrowser as any, "MISSING_SKU"),
+      ).rejects.toThrow("Product data not found for SKU MISSING_SKU");
 
       // Assert that it safely closed the context
       expect(mockContext.close).toHaveBeenCalled();

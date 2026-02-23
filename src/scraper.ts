@@ -36,7 +36,7 @@ export async function runSingleAmazonExtraction(browser: any, testSku: string) {
     );
     if (continueButton) {
       console.log("Found a CAPTCHA 'Continue' button. Clicking to bypass...");
-      await continueButton.click();
+      await continueButton.click({ timeout: 5000 }).catch(() => null);
       await sleep(2000); // Give it a moment to load the real page
     }
 
