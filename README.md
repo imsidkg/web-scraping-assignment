@@ -23,9 +23,14 @@ This is a TypeScript-based web scraper built using Playwright, designed to extra
 
 1. **Start Google Chrome in debugging mode.** The scraper connects to an existing, physical browser profile to avoid bot detection. Before running the script, carefully run this command in your terminal:
 
+   # Linux
    ```bash
    google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug
    ```
+
+
+   # macOS
+   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug
 
    _(Note: Keep this terminal process running and wait for the browser window to open)._
 
